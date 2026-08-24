@@ -331,7 +331,9 @@ A 1 minute 49 second walkthrough covering three generations end to end:
 It shows the app starting from source, each post being generated with the live
 elapsed-time spinner, and the finished posts with their character counts.
 
-**▶ [Watch the demo](demo/demo.mp4)** (MP4, 1280×720)
+**▶ [Watch on Google Drive](https://drive.google.com/file/d/1vcIGBh2HpE0QeW-vuKFcMOk4fpjp9qOF/view?usp=sharing)** — streams in the browser, no download needed
+
+Also included in this repository: [`demo/demo.mp4`](demo/demo.mp4) (MP4, 1280×720, 22 MB)
 
 <!--
   To make the video play inline on GitHub instead of opening in a new tab,
