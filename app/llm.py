@@ -22,9 +22,14 @@ from app.config import get_anthropic_api_key, get_effort, get_model
 # specific, so they live here rather than in the environment.
 # ---------------------------------------------------------------------------
 
-# A LinkedIn post is short. This caps the response and keeps requests fast.
-# (langchain-anthropic would otherwise default to 128,000 tokens.)
-MAX_TOKENS: int = 2000
+# Caps the response so requests stay fast (langchain-anthropic would
+# otherwise default to 128,000 tokens).
+#
+# This budget covers thinking tokens AND the post itself. Non-Latin scripts
+# cost far more tokens for the same text - a Bengali post measured 1,286
+# output tokens where the English equivalent used 494 - so leave real
+# headroom here or long posts get cut off mid-sentence.
+MAX_TOKENS: int = 4000
 
 # Seconds to wait for the API before giving up.
 TIMEOUT: float = 60.0

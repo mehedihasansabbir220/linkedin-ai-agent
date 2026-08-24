@@ -321,3 +321,106 @@ def test_structured_entry_point_validates_inputs_too(fake_llm):
 
     with pytest.raises(ValueError, match="topic"):
         generate_post_result("", "English")
+
+
+# ---------------------------------------------------------------------------
+# Output guards
+# ---------------------------------------------------------------------------
+
+
+def _reply(text: str, stop_reason: str | None) -> AIMessage:
+    metadata = {"stop_reason": stop_reason} if stop_reason else {}
+    return AIMessage(content=text, response_metadata=metadata)
+
+
+@pytest.fixture
+def model_reply(monkeypatch):
+    """Install a model that returns one specific AIMessage."""
+
+    def install(message: AIMessage) -> None:
+        monkeypatch.setattr(
+            agent, "get_llm", lambda: RunnableLambda(lambda _: message)
+        )
+
+    return install
+
+
+def test_truncated_post_is_rejected(model_reply):
+    """A post cut off at the token limit must not be passed off as finished."""
+    model_reply(_reply("This sentence stops mid-w", "max_tokens"))
+
+    with pytest.raises(PostGenerationError, match="cut off"):
+        generate_linkedin_post("Remote onboarding", "English")
+
+
+def test_refusal_is_reported(model_reply):
+    model_reply(_reply("", "refusal"))
+
+    with pytest.raises(PostGenerationError, match="declined"):
+        generate_linkedin_post("Remote onboarding", "English")
+
+
+def test_normal_completion_is_accepted(model_reply):
+    model_reply(_reply(SAMPLE_POST, "end_turn"))
+
+    assert generate_linkedin_post("Remote onboarding", "English") == SAMPLE_POST
+
+
+def test_missing_metadata_does_not_break(model_reply):
+    """Fakes and older models may not report a stop reason at all."""
+    model_reply(_reply(SAMPLE_POST, None))
+
+    assert generate_linkedin_post("Remote onboarding", "English") == SAMPLE_POST
+
+
+def test_over_long_topic_is_rejected(fake_llm):
+    fake_llm(SAMPLE_POST)
+
+    with pytest.raises(ValueError, match="under 200 characters"):
+        generate_linkedin_post("x" * 201, "English")
+
+
+def test_topic_at_the_limit_is_allowed(fake_llm):
+    fake_llm(SAMPLE_POST)
+
+    assert generate_linkedin_post("x" * 200, "English") == SAMPLE_POST
+
+
+def test_extra_paragraphs_are_merged_down(fake_llm):
+    """The brief allows 2-4 paragraphs, so 5 must be merged to 4."""
+    five = "\n\n".join(["Hook.", "Body one is fairly long here.", "Tiny.",
+                        "Body two is also fairly long.", "Closing thought."])
+    fake_llm(five)
+
+    result = generate_linkedin_post("Remote onboarding", "English")
+
+    assert len(result.split("\n\n")) == 4
+
+
+def test_merging_never_loses_text(fake_llm):
+    five = "\n\n".join(["Alpha.", "Bravo charlie.", "Delta.", "Echo foxtrot.",
+                        "Golf hotel."])
+    fake_llm(five)
+
+    result = generate_linkedin_post("Remote onboarding", "English")
+
+    assert set(result.split()) == set(five.split())
+
+
+def test_compliant_posts_are_left_alone(fake_llm):
+    three = "One.\n\nTwo.\n\nThree."
+    fake_llm(three)
+
+    assert generate_linkedin_post("Remote onboarding", "English") == three
+
+
+def test_trailing_hashtags_are_not_treated_as_a_paragraph(fake_llm):
+    post = "\n\n".join(["Hook.", "Body one.", "Tiny.", "Body two.",
+                        "Closing.", "#Engineering #Leadership"])
+    fake_llm(post)
+
+    result = generate_linkedin_post("Remote onboarding", "English")
+    blocks = result.split("\n\n")
+
+    assert blocks[-1] == "#Engineering #Leadership"
+    assert len(blocks) == 5  # 4 paragraphs + the hashtag line

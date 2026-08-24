@@ -17,14 +17,31 @@ The second is a thin wrapper around the first, so both share one code path.
 
 from __future__ import annotations
 
+import logging
+import re
 from dataclasses import dataclass
 
 import anthropic
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import Runnable
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import Runnable, RunnableLambda
 
 from app.llm import get_llm
 from app.prompts import get_post_prompt
+
+logger = logging.getLogger(__name__)
+
+# LinkedIn refuses posts longer than this.
+MAX_POST_CHARS: int = 3000
+
+# Keeps a runaway topic from inflating the prompt and the bill.
+MAX_TOPIC_CHARS: int = 200
+
+# The brief asks for 2-4 paragraphs. The prompt asks for this too, but a
+# model follows it only about 80% of the time, so we also enforce it here.
+MAX_PARAGRAPHS: int = 4
+
+# A line that is nothing but hashtags is not a paragraph.
+_HASHTAG_LINE = re.compile(r"(#\w[\w-]*\s*)+")
 
 
 class PostGenerationError(RuntimeError):
@@ -64,9 +81,11 @@ def build_chain() -> Runnable:
         A runnable that takes a dict with "topic" and "language" keys and
         returns the generated post as a string.
     """
-    # StrOutputParser pulls the plain text out of the model's response object,
-    # so the chain returns a str instead of an AIMessage.
-    return get_post_prompt() | get_llm() | StrOutputParser()
+    # We deliberately do NOT use StrOutputParser here. It throws away the
+    # response metadata, including `stop_reason` - so a post that was cut off
+    # at the token limit would look like a finished post. `_extract_post`
+    # checks that first.
+    return get_post_prompt() | get_llm() | RunnableLambda(_extract_post)
 
 
 def generate_post_result(topic: str, language: str) -> PostResult:
@@ -84,7 +103,7 @@ def generate_post_result(topic: str, language: str) -> PostResult:
         MissingAPIKeyError: if ANTHROPIC_API_KEY is not configured.
         PostGenerationError: if the Claude API call fails or returns nothing.
     """
-    clean_topic = _require_text(topic, "topic")
+    clean_topic = _require_text(topic, "topic", MAX_TOPIC_CHARS)
     clean_language = _require_text(language, "language")
 
     chain = build_chain()
@@ -116,9 +135,12 @@ def generate_post_result(topic: str, language: str) -> PostResult:
             "Could not reach the Claude API. Check your internet connection."
         ) from exc
     except anthropic.APIStatusError as exc:
+        # The raw API message can contain request internals, so it goes to the
+        # log for the developer - not to the user's screen.
+        logger.error("Claude API error %s: %s", exc.status_code, exc.message)
         raise PostGenerationError(
-            f"The Claude API returned an error (HTTP {exc.status_code}): "
-            f"{exc.message}"
+            f"The Claude API returned an error (HTTP {exc.status_code}). "
+            "Please try again."
         ) from exc
 
     return PostResult(
@@ -148,12 +170,42 @@ def generate_linkedin_post(topic: str, language: str) -> str:
     return generate_post_result(topic, language).generated_post
 
 
-def _require_text(value: str, field_name: str) -> str:
-    """Return `value` stripped, or raise if it is empty."""
+def _extract_post(message: AIMessage) -> str:
+    """Pull the post text out of the model reply, checking why it stopped.
+
+    Claude reports *why* it stopped generating. Two of those reasons produce
+    text that looks fine but is not usable, so we catch them here rather than
+    handing a broken post to the user.
+    """
+    stop_reason = (message.response_metadata or {}).get("stop_reason")
+
+    if stop_reason == "max_tokens":
+        raise PostGenerationError(
+            "The post was cut off before it finished. Try a shorter topic, or "
+            "raise MAX_TOKENS in app/llm.py."
+        )
+
+    if stop_reason == "refusal":
+        raise PostGenerationError(
+            "Claude declined to write about this topic. Please try a "
+            "different one."
+        )
+
+    return message.text
+
+
+def _require_text(value: str, field_name: str, max_chars: int = 0) -> str:
+    """Return `value` stripped, or raise if it is empty or too long."""
     text = (value or "").strip()
 
     if not text:
         raise ValueError(f"Please provide a {field_name}.")
+
+    if max_chars and len(text) > max_chars:
+        raise ValueError(
+            f"Please keep the {field_name} under {max_chars} characters "
+            f"(yours is {len(text)})."
+        )
 
     return text
 
@@ -174,4 +226,34 @@ def _clean_post(text: str) -> str:
             "Claude returned an empty response. Please try again."
         )
 
-    return post
+    return _limit_paragraphs(post)
+
+
+def _limit_paragraphs(post: str) -> str:
+    """Merge paragraphs down to MAX_PARAGRAPHS if the model wrote too many.
+
+    Prompting alone does not reliably hold the model to 2-4 paragraphs, so we
+    finish the job here. Merging joins the two shortest neighbouring
+    paragraphs, which changes the structure as little as possible. No text is
+    ever removed.
+    """
+    blocks = [block.strip() for block in post.split("\n\n") if block.strip()]
+
+    # A trailing hashtag line stays on its own and does not count.
+    hashtags = ""
+    if blocks and _HASHTAG_LINE.fullmatch(blocks[-1]):
+        hashtags = blocks.pop()
+
+    while len(blocks) > MAX_PARAGRAPHS:
+        joint = min(
+            range(len(blocks) - 1),
+            key=lambda i: len(blocks[i]) + len(blocks[i + 1]),
+        )
+        blocks[joint : joint + 2] = [
+            f"{blocks[joint]} {blocks[joint + 1]}"
+        ]
+
+    if hashtags:
+        blocks.append(hashtags)
+
+    return "\n\n".join(blocks)

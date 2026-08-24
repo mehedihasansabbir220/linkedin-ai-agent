@@ -14,7 +14,8 @@ import traceback
 import streamlit as st
 
 from app.agent import PostGenerationError, PostResult, generate_post_result
-from app.config import MissingAPIKeyError
+from app.agent import MAX_POST_CHARS, MAX_TOPIC_CHARS
+from app.config import ConfigurationError, MissingAPIKeyError
 
 LANGUAGES: list[str] = [
     "English",
@@ -39,7 +40,8 @@ def main() -> None:
 
     topic = st.text_input(
         "Topic",
-        placeholder="e.g. what I learned onboarding engineers remotely",
+        max_chars=MAX_TOPIC_CHARS,
+        placeholder="e.g. onboarding engineers on a remote team",
         help="What should the post be about?",
     )
     language = st.selectbox(
@@ -71,8 +73,14 @@ def _generate(topic: str, language: str) -> None:
         with st.spinner(f"Writing your post in {language}...", show_time=True):
             st.session_state["result"] = generate_post_result(topic, language)
 
+    except ConfigurationError as exc:
+        # A bad value in .env - not the user's fault, so say so.
+        st.session_state["error"] = (
+            f"Configuration problem in your .env file: {exc}"
+        )
+
     except ValueError as exc:
-        # Empty topic or language - the message is written for users.
+        # Empty or over-long topic - the message is written for users.
         st.session_state["error"] = str(exc)
 
     except MissingAPIKeyError:
@@ -115,6 +123,16 @@ def _show_result() -> None:
     st.markdown("### Your post")
     with st.container(border=True):
         st.markdown(_as_markdown(result.generated_post))
+
+    length = len(result.generated_post)
+    if length > MAX_POST_CHARS:
+        st.warning(
+            f"This post is {length:,} characters. LinkedIn allows "
+            f"{MAX_POST_CHARS:,}, so you will need to trim it.",
+            icon="✂️",
+        )
+    else:
+        st.caption(f"{length:,} / {MAX_POST_CHARS:,} characters")
 
     with st.expander("Copy post text"):
         st.code(result.generated_post, language=None, wrap_lines=True)

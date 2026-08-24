@@ -28,6 +28,14 @@ class MissingAPIKeyError(RuntimeError):
     """Raised when ANTHROPIC_API_KEY is not configured."""
 
 
+class ConfigurationError(ValueError):
+    """Raised when an environment variable holds an invalid value.
+
+    Subclasses ValueError so existing callers keep working, but lets the UI
+    tell "you typed something wrong" apart from "your .env is wrong".
+    """
+
+
 @lru_cache(maxsize=1)
 def get_anthropic_api_key() -> str:
     """Return the Anthropic API key from the environment.
@@ -61,7 +69,7 @@ def get_effort() -> str:
     effort = os.getenv("ANTHROPIC_EFFORT", "").strip().lower() or DEFAULT_EFFORT
 
     if effort not in VALID_EFFORTS:
-        raise ValueError(
+        raise ConfigurationError(
             f"ANTHROPIC_EFFORT must be one of {', '.join(VALID_EFFORTS)}, "
             f"got {effort!r}"
         )
