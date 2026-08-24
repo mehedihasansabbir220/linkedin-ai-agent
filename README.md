@@ -3,8 +3,8 @@
 Module 21 - AI Agent Project.
 
 A professional AI agent built with LangChain that generates LinkedIn-style
-posts. The user provides a **topic** and a **language**, and the agent uses an
-OpenAI model through LangChain to write the post.
+posts. The user provides a **topic** and a **language**, and the agent uses a
+Claude model through LangChain to write the post.
 
 ## Status
 
@@ -14,8 +14,8 @@ Project scaffold only. The agent is not implemented yet.
 
 - Python 3.11+
 - LangChain
-- LangChain OpenAI integration (`langchain-openai`)
-- OpenAI API
+- LangChain Anthropic integration (`langchain-anthropic`)
+- Claude API (Anthropic)
 - Streamlit
 - python-dotenv
 - pytest
@@ -27,7 +27,8 @@ linkedin-ai-agent/
 ├── app/
 │   ├── __init__.py      # Marks app as a Python package
 │   ├── agent.py         # Builds the LangChain chain / agent entry point
-│   ├── llm.py           # Creates the configured ChatOpenAI model
+│   ├── config.py        # Loads .env and exposes settings (python-dotenv)
+│   ├── llm.py           # Creates the configured ChatAnthropic model
 │   └── prompts.py       # Prompt templates for the LinkedIn post
 ├── tests/
 │   └── __init__.py      # Marks tests as a Python package
@@ -50,7 +51,7 @@ pip install -r requirements.txt
 
 # 3. Configure your API key
 cp .env.example .env
-# then edit .env and set OPENAI_API_KEY
+# then edit .env and set ANTHROPIC_API_KEY
 ```
 
 ## Running
