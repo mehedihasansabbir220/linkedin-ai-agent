@@ -188,6 +188,8 @@ linkedin-ai-agent/
 │   ├── conftest.py         # --run-integration flag and marker
 │   ├── test_agent.py       # 38 offline unit tests
 │   └── test_integration.py # 9 real-API tests (opt-in)
+├── demo/
+│   └── demo.mp4            # Demo walkthrough video
 ├── screenshots/
 ├── .env.example
 ├── .gitignore
@@ -318,9 +320,28 @@ $ pytest --run-integration
 
 ## 15. Demo Video
 
-> **Placeholder** — demo video to be added.
->
-> `[Watch the demo](https://your-video-link-here)`
+A 1 minute 49 second walkthrough covering three generations end to end:
+
+| Topic | Language |
+|---|---|
+| AI in Healthcare | English |
+| Remote Work Productivity | Bengali |
+| Future of Artificial Intelligence | Spanish |
+
+It shows the app starting from source, each post being generated with the live
+elapsed-time spinner, and the finished posts with their character counts.
+
+**▶ [Watch the demo](demo/demo.mp4)** (MP4, 1280×720)
+
+<!--
+  To make the video play inline on GitHub instead of opening in a new tab,
+  drag demo/demo.mp4 into a GitHub issue or the web README editor. GitHub
+  uploads it and returns a URL like:
+
+      https://github.com/mehedihasansabbir220/linkedin-ai-agent/assets/<id>/<uuid>
+
+  Paste that URL on its own line here and GitHub renders a player.
+-->
 
 ## 16. Future Improvements
 
