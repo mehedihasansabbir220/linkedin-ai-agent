@@ -227,7 +227,7 @@ cp .env.example .env
 | `ANTHROPIC_EFFORT` | No | `high` | Reasoning depth: `low`, `medium`, `high`, `xhigh`, `max` |
 
 ```env
-ANTHROPIC_API_KEY=sk-ant-your-key-here
+ANTHROPIC_API_KEY=your_api_key_here
 ANTHROPIC_MODEL=claude-opus-5
 ANTHROPIC_EFFORT=high
 ```
